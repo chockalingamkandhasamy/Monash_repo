@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>linga
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:mcp="http://www.mulesoft.org/schema/mule/mcp"
+      xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/mcp http://www.mulesoft.org/schema/mule/mcp/current/mule-mcp.xsd
+        http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+
+    <!-- HTTP Listener -->
+    <http:listener-config name="HTTP_Listener_config">
+        <http:listener-connection host="0.0.0.0" port="8081"/>
+    </http:listener-config>
+
+    <!-- MCP Server -->
+    <mcp:server-config name="MCP_Server"
+                       serverName="mule-mcp-server"
+                       serverVersion="1.0.0">
+        <!-- Must be exactly JSON or SSE per Studio; keep JSON -->
+        <mcp:streamable-http-server-connection listenerConfig="HTTP_Listener_config" responseContentType="JSON"/>
+    </mcp:server-conf
+
+    <!-- MCP Client -->
+    <mcp:client-config name="MCP_Client"
+                       clientName="mulemcp"
+                       clientVersion="1.0.0"
+                       doc:name="MCP Client">
+        <mcp:streamable-http-client-connection serverUrl="https://mcpcruds-h36qi1.5sc6y6-2.usa-e2.cloudhub.io"/>
+    </mcp:client-config>
+
+    <!-- TOOL: Account Get (MCP tool listener) -->
+    <flow name="accountGetFlow" doc:name="accountGetFlow">
+        <mcp:tool-listener name="MCP_accountGet"
+                           config-ref="MCP_Server"
+                           doc:name="MCP Account Get">
+            <mcp:description>Retrieve Salesforce Account by ID or Name</mcp:description>
+            <mcp:parameters-schema><![CDATA[
+                {
+                    "type": "object",
+                    "properties": {
+                        "accountId": {"type": "string"},
+                        "accountName": {"type": "string"}
+                    }
+                }
+            ]]></mcp:parameters-schema>
+
+            <!-- Force serialization to JSON text (supported in your runtime) -->
+            <mcp:responses>
+                <mcp:text-tool-response-content text="#[write(payload, 'application/json')]"/>
+            </mcp:responses>
+        </mcp:tool-listener>
+
+        <logger level="INFO" message="MCP Payload received: #[payload]" />
+
+        <set-variable variableName="accountId" value="#[payload.accountId default null]" />
+        <set-variable variableName="accountName" value="#[payload.accountName default null]" />
+
+        <try>
+            <salesforce:query config-ref="Salesforce_Config">
+                <salesforce:salesforce-query><![CDATA[
+                    #[ "SELECT Id, Name, Industry, Phone, Website FROM Account WHERE " ++ 
+                        (if (vars.accountId != null) 
+                            "Id = '" ++ vars.accountId ++ "'" 
+                        else if (vars.accountName != null) 
+                            "Name = '" ++ vars.accountName ++ "'" 
+                        else 
+                            "Id = 'Invalid'") 
+                    ]
+                ]]></salesforce:salesforce-query>
+            </salesforce:query>
+
+            <ee:transform doc:name="Format Salesforce Response">
+                <ee:message>
+                    <ee:set-payload><![CDATA[
+                        %dw 2.0
+                        output application/json
+                        ---
+                        if (sizeOf(payload) == 0)
+                            { error: "Account not found" }
+                        else {
+                            Id: payload[0].Id,
+                            Name: payload[0].Name,
+                            Industry: payload[0].Industry default "N/A",
+                            Phone: payload[0].Phone default "N/A"
+                        }
+                    ]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+        </try>
+
+        <error-handler>
+            <on-error-continue>
+                <logger level="ERROR" message="Error retrieving account: #[error.description]" />
+                <ee:transform doc:name="Error Payload">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[
+                            %dw 2.0
+                            output application/json
+                            ---
+                            {
+                                error: "Unable to retrieve account",
+                                details: error.description
+                            }
+                        ]]></ee:set-payload>
+                    </ee:message>
+                </ee:transform>
+            </on-error-continue>
+        </error-handler>
+    </flow>
+
+    <!-- HTTP Flow that calls the MCP tool -->
+    <flow name="salesforce-agent-crudFlow" doc:id="db9415ff-5b8b-493a-a705-6e10e146b698">
+        <http:listener path="/api/account" config-ref="HTTP_Listener_config" doc:name="HTTP Listener - Trigger"/>
+
+        <logger level="INFO" message="Incoming HTTP payload: #[payload]" />
+
+        <!-- Pass-through payload to MCP tool (keeps it as JSON) -->
+        <ee:transform doc:name="Pass-through Payload for MCP Call">
+            <ee:message>
+                <ee:set-payload><![CDATA[
+                    %dw 2.0
+                    output application/json
+                    ---
+                    payload
+                ]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+
+        <!-- Call the MCP tool -->
+        <mcp:call-tool config-ref="MCP_Client"
+                       toolName="MCP_accountGet"
+                       doc:name="MCP Client - Call AccountGet Tool" />
+
+        <!-- NEW: extract JSON payload from MCP envelope (contents[].text) -->
+        <ee:transform doc:name="Extract MCP response">
+            <ee:message>
+                <ee:set-payload><![CDATA[
+                    %dw 2.0
+                    output application/json
+                    ---
+                    // If MCP returns a wrapper with contents[0].text (stringified JSON),
+                    // parse that text into a real JSON object. Otherwise, return payload as-is.
+                    if (payload.contents? and sizeOf(payload.contents) > 0 and payload.contents[0].text? )
+                        // parse the text field as JSON
+                        read(payload.contents[0].text, "application/json")
+                    else if (payload.body? and payload.body is String)
+                        read(payload.body, "application/json")
+                    else
+                        payload
+                ]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+
+        <!-- Ensure the outgoing HTTP response has correct content-type and is JSON text -->
+        <ee:transform doc:name="Ensure response JSON string">
+            <ee:message>
+                <ee:set-payload><![CDATA[
+                    %dw 2.0
+                    output application/json
+                    ---
+                    payload
+                ]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+
+        <logger level="INFO" message="Final HTTP response payload: #[write(payload,'application/json')]" />
+    </flow>
+</mule>
