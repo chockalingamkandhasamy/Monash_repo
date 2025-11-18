@@ -1,0 +1,114 @@
+#%RAML 1.0
+title: User Management API
+version: v1
+baseUri: http://api.example.com/{version}
+
+types:
+  User:
+    type: object
+    properties:
+      id: integer
+      firstName: string
+      lastName: string
+      email: string
+      age?: integer
+
+/users:
+  displayName: Users
+  description: Operations related to managing users.
+  get:
+    description: Retrieve a list of all users.
+    queryParameters:
+      limit?:
+        type: integer
+        description: Maximum number of users to return.
+      offset?:
+        type: integer
+        description: Number of users to skip.
+    responses:
+      200:
+        body:
+          application/json:
+            type: User[]
+            examples:
+              usersList: |
+                [
+                  {
+                    "id": 1,
+                    "firstName": "John",
+                    "lastName": "Doe",
+                    "email": "john.doe@example.com",
+                    "age": 30
+                  },
+                  {
+                    "id": 2,
+                    "firstName": "Jane",
+                    "lastName": "Smith",
+                    "email": "jane.smith@example.com"
+                  }
+                ]
+  post:
+    description: Create a new user.
+    body:
+      application/json:
+        type: User
+        examples:
+          newUser: |
+            {
+              "firstName": "Alice",
+              "lastName": "Johnson",
+              "email": "alice.johnson@example.com",
+              "age": 25
+            }
+    responses:
+      201:
+        description: User created successfully.
+        body:
+          application/json:
+            type: User
+
+/users/{userId}:
+  displayName: User by ID
+  description: Operations on a specific user.
+  uriParameters:
+    userId:
+      type: integer
+      description: The unique identifier of the user.
+  get:
+    description: Retrieve a specific user by ID.
+    responses:
+      200:
+        body:
+          application/json:
+            type: User
+            examples:
+              singleUser: |
+                {
+                  "id": 1,
+                  "firstName": "John",
+                  "lastName": "Doe",
+                  "email": "john.doe@example.com",
+                  "age": 30
+                }
+      404:
+        description: User not found.
+  put:
+    description: Update an existing user.
+    body:
+      application/json:
+        type: User
+    responses:
+      200:
+        description: User updated successfully.
+        body:
+          application/json:
+            type: User
+      404:
+        description: User not found.
+  delete:
+    description: Delete a user by ID.
+    responses:
+      204:
+        description: User deleted successfully.
+      404:
+        description: User not found.
