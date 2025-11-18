@@ -1,0 +1,149 @@
+<mule xmlns="http://www.mulesoft.org/schema/mule/core" 
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" 
+      xmlns:http="http://www.mulesoft.org/schema/mule/http" 
+      xmlns:logger="http://www.mulesoft.org/schema/mule/logger" 
+      xmlns:scheduler="http://www.mulesoft.org/schema/mule/scheduler" 
+      xmlns:sftp="http://www.mulesoft.org/schema/mule/sftp" 
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+      xsi:schemaLocation="
+      http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+      http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+      http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+      http://www.mulesoft.org/schema/mule/logger http://www.mulesoft.org/schema/mule/logger/current/mule-logger.xsd
+      http://www.mulesoft.org/schema/mule/scheduler http://www.mulesoft.org/schema/mule/scheduler/current/mule-scheduler.xsd
+      http://www.mulesoft.org/schema/mule/sftp http://www.mulesoft.org/schema/mule/sftp/current/mule-sftp.xsd">
+
+    <flow name="getInvoicesFlow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/invoices" doc:name="HTTP Listener" method="GET"/>
+        <logger level="INFO" doc:name="Logger" message="Received request for invoices"/>
+        <set-variable variableName="StartDate" value="#[attributes.queryParams.StartDate]" doc:name="Set Start Date"/>
+        <set-variable variableName="EndDate" value="#[attributes.queryParams.EndDate]" doc:name="Set End Date"/>
+        <http:request config-ref="HTTP_Request_Configuration" method="GET" doc:name="HTTP Request" url="https://titansportuat.titangym.com/Api/v2.2/odata/CompanyInvoices?$count=true&$filter=date ge #[vars.StartDate] and date lt #[vars.EndDate] and isDeleted eq false&$expand=receiver,items($expand=Transactions)">
+            <http:request-builder>
+                <http:header headerName="Authorization" value="Bearer #[vars.accessToken]"/>
+            </http:request-builder>
+        </http:request>
+        <ee:transform doc:name="Transform Message">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload map ((invoice) -> {
+    number: invoice.number,
+    invoiceDate: invoice.invoiceDate,
+    clubId: invoice.clubId,
+    isDeleted: invoice.isDeleted,
+    invoiceId: invoice.invoiceId,
+    receiver: {
+        name: invoice.receiver.name,
+        notes: invoice.receiver.notes,
+        contactPerson: invoice.receiver.contactPerson
+    },
+    invoiceLineItems: invoice.invoiceLineItems map ((item) -> {
+        itemNumber: item.itemNumber,
+        name: item.name,
+        value: {
+            net: item.value.net,
+            gross: item.value.gross,
+            vat: item.value.vat
+        }
+    }),
+    transactions: invoice.transactions map ((transaction) -> {
+        transactionId: transaction.transactionId,
+        contractChargeId: transaction.contractChargeId
+    })
+})]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <logger level="INFO" doc:name="Logger" message="Returning response for invoices"/>
+        <set-payload value="#[payload]" doc:name="Set Payload"/>
+    </flow>
+
+    <flow name="getTransactionFlow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/transactions/{id}" doc:name="HTTP Listener" method="GET"/>
+        <logger level="INFO" doc:name="Logger" message="Received request for transaction with ID #[attributes.uriParams.id]"/>
+        <http:request config-ref="HTTP_Request_Configuration" method="GET" doc:name="HTTP Request" url="https://titansportuat.titangym.com/Api/v2.2/odata/Transactions/#{attributes.uriParams.id}?$expand=accountingDetails">
+            <http:request-builder>
+                <http:header headerName="Authorization" value="Bearer #[vars.accessToken]"/>
+            </http:request-builder>
+        </http:request>
+        <ee:transform doc:name="Transform Message">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+    clubId: payload.clubId,
+    description: payload.description,
+    amount: {
+        net: payload.amount.net,
+        gross: payload.amount.gross,
+        vat: payload.amount.vat
+    },
+    accountingDetails: payload.accountingDetails map ((detail) -> {
+        accountNumber: detail.accountNumber,
+        ledger: detail.ledger,
+        split: detail.split
+    })
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <logger level="INFO" doc:name="Logger" message="Returning response for transaction #[attributes.uriParams.id]"/>
+        <set-payload value="#[payload]" doc:name="Set Payload"/>
+    </flow>
+
+    <flow name="getContractChargesFlow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/contractCharges/{id}" doc:name="HTTP Listener" method="GET"/>
+        <logger level="INFO" doc:name="Logger" message="Received request for contract charges with ID #[attributes.uriParams.id]"/>
+        <http:request config-ref="HTTP_Request_Configuration" method="GET" doc:name="HTTP Request" url="https://titansportuat.titangym.com/Api/v2.2/odata/ContractCharges/#{attributes.uriParams.id}?$expand=contract($select=clubId),accountingDetails">
+            <http:request-builder>
+                <http:header headerName="Authorization" value="Bearer #[vars.accessToken]"/>
+            </http:request-builder>
+        </http:request>
+        <ee:transform doc:name="Transform Message">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+    clubId: payload.clubId,
+    description: payload.description,
+    amount: {
+        net: payload.amount.net,
+        gross: payload.amount.gross,
+        vat: payload.amount.vat
+    },
+    accountingDetails: payload.accountingDetails map ((detail) -> {
+        accountNumber: detail.accountNumber,
+        ledger: detail.ledger,
+        split: detail.split
+    })
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <logger level="INFO" doc:name="Logger" message="Returning response for contract charges #[attributes.uriParams.id]"/>
+        <set-payload value="#[payload]" doc:name="Set Payload"/>
+    </flow>
+
+    <flow name="postPaymentsFlow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/payments" doc:name="HTTP Listener" method="POST"/>
+        <logger level="INFO" doc:name="Logger" message="Received request to mark payment as paid"/>
+        <set-variable variableName="invoiceId" value="#[payload.invoiceId]" doc:name="Set Invoice ID"/>
+        <http:request config-ref="HTTP_Request_Configuration" method="POST" doc:name="HTTP Request" url="https://titansportuat.titangym.com/Api/v2/Invoices/MarkCompanyInvoiceAsPaid">
+            <http:request-builder>
+                <http:header headerName="Authorization" value="Bearer #[vars.accessToken]"/>
+                <http:body><![CDATA[{"invoiceId": #[vars.invoiceId]}]]></http:body>
+            </http:request-builder>
+        </http:request>
+        <logger level="INFO" doc:name="Logger" message="Payment marked as paid for invoice #[vars.invoiceId]"/>
+        <set-payload value="200 OK" doc:name="Set Payload"/>
+    </flow>
+
+    <error-handler>
+        <on-error-continue enableNotifications="true" doc:name="Error Handling">
+            <logger level="ERROR" doc:name="Error Logger" message="Error occurred: #[error.message]"/>
+            <set-payload value="Error processing request" doc:name="Set Payload"/>
+            <set-variable variableName="errorCode" value="#[error.statusCode]" doc:name="Set Error Code"/>
+        </on-error-continue>
+    </error-handler>
+</mule>
