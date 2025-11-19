@@ -1,0 +1,5 @@
+<mule xmlns="http://www.mulesoft.org/schema/mule/core">
+   <flow name="getInvoicesFlow">
+       <http:listener path="/invoices"/>
+   </flow>
+</mule>
