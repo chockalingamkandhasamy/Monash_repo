@@ -1,0 +1,32 @@
+#%RAML 1.0
+title: User Management API
+version: v1
+baseUri: http://api.example.com/{version}
+
+types:
+  User:
+    type: object
+    properties:
+      id: integer
+      firstName: string
+      lastName: string
+      email: string
+      age?: integer
+
+/users:
+  displayName: Users
+  description: Operations related to managing users.
+  get:
+    description: Retrieve a list of all users.
+    queryParameters:
+      limit?:
+        type: integer
+        description: Maximum number of users to return.
+      offset?:
+        type: integer
+        description: Number of users to skip.
+    responses:
+      200:
+        body:
+          application/json:
+            type: User[]
