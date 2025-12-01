@@ -1,0 +1,271 @@
+```yaml
+#%RAML 1.0
+title: Banner Events Experience API
+description: Experience API to retrieve modified Banner details for unit of learning availabilities, student addresses, and staged study applications.
+baseUri: https://api.example.com/v1
+version: v1
+mediaType: application/json
+securitySchemes:
+  clientId:
+    type: OAuth 2.0
+    describedBy:
+      headers:
+        Authorization:
+          description: "Bearer token for authentication"
+          type: string
+      responses:
+        401:
+          description: "Unauthorized"
+    settings:
+      authorizationUri: https://auth.example.com/oauth/authorize
+      tokenUri: https://auth.example.com/oauth/token
+
+types:
+  EventResponse:
+    type: object
+    properties:
+      correlationId:
+        type: string
+      message:
+        type: string
+    example:
+      correlationId: "9d2dee33-7803-485a-a2b1-2c7538e597ee"
+      message: "Event Received"
+
+  BadRequestError:
+    type: object
+    properties:
+      correlationId:
+        type: string
+      description:
+        type: string
+      errorType:
+        type: string
+      additionalDetails:
+        type: string
+    example:
+      correlationId: "945e4740-6795-11f0-8f9f-dc4546dcaff0"
+      description: "Invalid eventType received. Expected: studentAddress, but received: <eventType>"
+      errorType: "APP:BAD_REQUEST"
+      additionalDetails: "Invalid eventType received. Expected: studentAddress, but received: <eventType>"
+
+  UnitOfLearningAvailability:
+    type: object
+    properties:
+      id:
+        type: string
+      published:
+        type: string
+      resource:
+        type: object
+        properties:
+          name:
+            type: string
+          id:
+            type: string
+          version:
+            type: string
+      operation:
+        type: string
+      contentType:
+        type: string
+      messageType:
+        type: string
+      content:
+        type: object
+        properties:
+          crn:
+            type: string
+          termCode:
+            type: string
+          id:
+            type: string
+      publisher:
+        type: object
+        properties:
+          id:
+            type: string
+          applicationName:
+            type: string
+          tenant:
+            type: object
+            properties:
+              id:
+                type: string
+              alias:
+                type: string
+              name:
+                type: string
+              environment:
+                type: string
+    example:
+      id: "8"
+      published: "2025-03-27T01:19:40.651268+00"
+      resource:
+        name: "course-section-information"
+        id: "113ffb41-bcd7-4dbf-9c44-268010f1ce49"
+        version: "application/vnd.hedtech.integration.v16.1.0+json"
+      operation: "replaced"
+      contentType: "resource-representation"
+      messageType: "change-notification"
+      content:
+        crn: "1"
+        termCode: "202430"
+        id: "113ffb41-bcd7-4dbf-9c44-268010f1ce49"
+      publisher:
+        id: "30a25dd7-35c9-439b-bad5-2ce662da3c38"
+        applicationName: "Student API TEST"
+        tenant:
+          id: "4b09dbf7-056d-4985-81d8-f58aac95cc0b"
+          alias: "matest"
+          name: "Monash University (AUS)"
+          environment: "Test"
+
+  StudentAddress:
+    type: object
+    properties:
+      eventId:
+        type: string
+      eventType:
+        type: string
+      operation:
+        type: string
+      timestamp:
+        type: string
+      content:
+        type: object
+        properties:
+          studentAddress:
+            type: object
+            properties:
+              studentId:
+                type: string
+              lastModifiedDate:
+                type: string
+    example:
+      eventId: "evt-20250704-00123"
+      eventType: "studentAddress"
+      operation: "UPDATE"
+      timestamp: "2025-07-04T10:15:30Z"
+      content:
+        studentAddress:
+          studentId: "25996991"
+          lastModifiedDate: "2021-11-09T11:39:05Z"
+
+  StagedStudyApplication:
+    type: object
+    properties:
+      eventId:
+        type: string
+      eventType:
+        type: string
+      operation:
+        type: string
+      timestamp:
+        type: string
+      content:
+        type: object
+        properties:
+          studyApplication:
+            type: object
+            properties:
+              applicationStagingId:
+                type: string
+              applicationExternalId:
+                type: string
+              smsApplicationId:
+                type: string
+              smsApplicationNumber:
+                type: string
+              personManagerId:
+                type: string
+              bannerId:
+                type: string
+              templateCode:
+                type: string
+              submissionConfirmationCode:
+                type: string
+              transferStatus:
+                type: string
+              errors:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    code:
+                      type: string
+                    description:
+                      type: string
+                    message:
+                      type: string
+              lastModifiedDate:
+                type: string
+    example:
+      eventId: "evt-20250807-12345"
+      eventType: "stagedStudyApplication"
+      operation: "UPDATE"
+      timestamp: "2025-08-08T12:18:30Z"
+      content:
+        studyApplication:
+          applicationStagingId: "7cadm64d-f5bf-4829-b433-6e100287edfe"
+          applicationExternalId: "10085"
+          smsApplicationId: "23bf2d5c-7968-42ab-9455-a71eeb79420d"
+          smsApplicationNumber: "1"
+          personManagerId: "45bf2d8c-7968-42ab-9455-a71eeb74570d"
+          bannerId: "A1000085"
+          templateCode: "MONASHIMPORTTEMPLATEV8"
+          submissionConfirmationCode: "my.app"
+          transferStatus: "COMPLETE"
+          errors: []
+          lastModifiedDate: "2023-05-08T15:39:09Z"
+
+/events/unit-of-learning-availabilities:
+  post:
+    description: Endpoint to publish unit of learning availability events.
+    body:
+      application/json:
+        type: UnitOfLearningAvailability
+    responses:
+      202:
+        body:
+          application/json:
+            type: EventResponse
+      400:
+        body:
+          application/json:
+            type: BadRequestError
+
+/events/student-addresses:
+  post:
+    description: Endpoint to publish student address update events.
+    body:
+      application/json:
+        type: StudentAddress
+    responses:
+      202:
+        body:
+          application/json:
+            type: EventResponse
+      400:
+        body:
+          application/json:
+            type: BadRequestError
+
+/events/staged-study-applications:
+  post:
+    description: Endpoint to publish staged study application events.
+    body:
+      application/json:
+        type: StagedStudyApplication
+    responses:
+      202:
+        body:
+          application/json:
+            type: EventResponse
+      400:
+        body:
+          application/json:
+            type: BadRequestError
+``` 
+
+This RAML specification captures the essential details of the API as described in the Low-Level Design. It includes types, examples, endpoints, and error handling, providing a clear structure for implementation.
