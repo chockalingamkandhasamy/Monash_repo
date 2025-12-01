@@ -1,0 +1,165 @@
+```xml
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" 
+      xmlns:http="http://www.mulesoft.org/schema/mule/http" 
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" 
+      xmlns="http://www.mulesoft.org/schema/mule/core" 
+      xmlns:scheduler="http://www.mulesoft.org/schema/mule/scheduler" 
+      xmlns:mq="http://www.mulesoft.org/schema/mule/anypointmq" 
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/scheduler http://www.mulesoft.org/schema/mule/scheduler/current/mule-scheduler.xsd
+        http://www.mulesoft.org/schema/mule/anypointmq http://www.mulesoft.org/schema/mule/anypointmq/current/mule-anypointmq.xsd">
+
+    <flow name="getInvoicesFlow">
+        <http:listener config-ref="HTTP_Listener_config" path="/invoices" doc:name="HTTP Listener" allowedMethods="GET"/>
+        <logger level="INFO" doc:name="Log Start" message="Starting getInvoicesFlow"/>
+        <set-variable variableName="StartDate" value="#[attributes.queryParams.StartDate]" doc:name="Set StartDate"/>
+        <set-variable variableName="EndDate" value="#[attributes.queryParams.EndDate]" doc:name="Set EndDate"/>
+        <http:request config-ref="HTTP_Requester_config" method="GET" doc:name="Invoke Titan Gym API" 
+                      url="https://titansportuat.titangym.com/Api/v2.2/odata/CompanyInvoices?$count=true&$filter=date ge #[vars.StartDate] and date lt #[vars.EndDate] and isDeleted eq false&$expand=receiver,items($expand=Transactions)">
+            <http:request-builder>
+                <http:header headerName="Client-ID" value="#[properties.clientId]"/>
+            </http:request-builder>
+        </http:request>
+        <ee:transform doc:name="Transform Message">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload map ((invoice) -> {
+    number: invoice.number,
+    invoiceDate: invoice.invoiceDate,
+    clubId: invoice.clubId,
+    isDeleted: invoice.isDeleted,
+    invoiceId: invoice.invoiceId,
+    receiver: {
+        name: invoice.receiver.name,
+        notes: invoice.receiver.notes,
+        contactPerson: invoice.receiver.contactPerson
+    },
+    invoiceLineItems: invoice.invoiceLineItems map ((lineItem) -> {
+        itemNumber: lineItem.itemNumber,
+        name: lineItem.name,
+        value: {
+            net: lineItem.value.net,
+            gross: lineItem.value.gross,
+            vat: lineItem.value.vat
+        }
+    }),
+    transactions: invoice.transactions map ((transaction) -> {
+        transactionId: transaction.transactionId,
+        contractChargeId: transaction.contractChargeId
+    })
+})]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <logger level="INFO" doc:name="Log End" message="Completed getInvoicesFlow"/>
+        <set-payload value="#[payload]" doc:name="Set Response"/>
+    </flow>
+
+    <flow name="getTransactionFlow">
+        <http:listener config-ref="HTTP_Listener_config" path="/transactions/{id}" doc:name="HTTP Listener" allowedMethods="GET"/>
+        <logger level="INFO" doc:name="Log Start" message="Starting getTransactionFlow"/>
+        <set-variable variableName="transactionId" value="#[attributes.uriParams.id]" doc:name="Set Transaction ID"/>
+        <http:request config-ref="HTTP_Requester_config" method="GET" doc:name="Invoke Titan Gym API" 
+                      url="https://titansportuat.titangym.com/Api/v2.2/odata/Transactions/#{transactionId}?$expand=accountingDetails">
+            <http:request-builder>
+                <http:header headerName="Client-ID" value="#[properties.clientId]"/>
+            </http:request-builder>
+        </http:request>
+        <ee:transform doc:name="Transform Message">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+    clubId: payload.clubId,
+    description: payload.description,
+    amount: {
+        net: payload.amount.net,
+        gross: payload.amount.gross,
+        vat: payload.amount.vat
+    },
+    accountingDetails: payload.accountingDetails map ((detail) -> {
+        accountNumber: detail.accountNumber,
+        ledger: detail.ledger,
+        split: detail.split
+    })
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <logger level="INFO" doc:name="Log End" message="Completed getTransactionFlow"/>
+        <set-payload value="#[payload]" doc:name="Set Response"/>
+    </flow>
+
+    <flow name="getContractChargesFlow">
+        <http:listener config-ref="HTTP_Listener_config" path="/contractCharges/{id}" doc:name="HTTP Listener" allowedMethods="GET"/>
+        <logger level="INFO" doc:name="Log Start" message="Starting getContractChargesFlow"/>
+        <set-variable variableName="contractChargeId" value="#[attributes.uriParams.id]" doc:name="Set Contract Charge ID"/>
+        <http:request config-ref="HTTP_Requester_config" method="GET" doc:name="Invoke Titan Gym API" 
+                      url="https://titansportuat.titangym.com/Api/v2.2/odata/ContractCharges/#{contractChargeId}?$expand=contract($select=clubId),accountingDetails">
+            <http:request-builder>
+                <http:header headerName="Client-ID" value="#[properties.clientId]"/>
+            </http:request-builder>
+        </http:request>
+        <ee:transform doc:name="Transform Message">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+    clubId: payload.clubId,
+    description: payload.description,
+    amount: {
+        net: payload.amount.net,
+        gross: payload.amount.gross,
+        vat: payload.amount.vat
+    },
+    accountingDetails: payload.accountingDetails map ((detail) -> {
+        accountNumber: detail.accountNumber,
+        ledger: detail.ledger,
+        split: detail.split
+    })
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <logger level="INFO" doc:name="Log End" message="Completed getContractChargesFlow"/>
+        <set-payload value="#[payload]" doc:name="Set Response"/>
+    </flow>
+
+    <flow name="postPaymentsFlow">
+        <http:listener config-ref="HTTP_Listener_config" path="/payments" doc:name="HTTP Listener" allowedMethods="POST"/>
+        <logger level="INFO" doc:name="Log Start" message="Starting postPaymentsFlow"/>
+        <set-variable variableName="invoiceId" value="#[payload.invoiceId]" doc:name="Set Invoice ID"/>
+        <http:request config-ref="HTTP_Requester_config" method="POST" doc:name="Invoke Titan Gym API" 
+                      url="https://titansportuat.titangym.com/Api/v2/Invoices/MarkCompanyInvoiceAsPaid">
+            <http:request-builder>
+                <http:header headerName="Content-Type" value="application/json"/>
+                <http:header headerName="Client-ID" value="#[properties.clientId]"/>
+            </http:request-builder>
+            <http:body><![CDATA[{"invoiceId": #[vars.invoiceId]}]]></http:body>
+        </http:request>
+        <logger level="INFO" doc:name="Log End" message="Completed postPaymentsFlow"/>
+        <set-payload value="200 OK" doc:name="Set Response"/>
+    </flow>
+
+    <error-handler>
+        <on-error-continue enableNotifications="true" doc:name="Error Handling">
+            <logger level="ERROR" doc:name="Log Error" message="Error occurred: #[error.message]"/>
+            <set-payload value="APP:BAD_REQUEST" doc:name="Set Error Response"/>
+        </on-error-continue>
+    </error-handler>
+</mule>
+```
+
+### Endpoints
+1. **GET /invoices**: Retrieves invoice data.
+2. **GET /transactions/{id}**: Retrieves transaction data for a specific invoice.
+3. **GET /contractCharges/{id}**: Retrieves contract charges for a specific invoice.
+4. **POST /payments**: Marks an invoice as paid.
+
+### DataWeave/Transform Message
+- The transformation logic is included within the `<ee:transform>` components for each flow, mapping the incoming payload to the required output structure.
+
+This XML adheres to best practices for Mule 4, including proper error handling and logging. Each flow is clearly defined with appropriate naming conventions.
