@@ -1,0 +1,296 @@
+```yaml
+#%RAML 1.0
+title: Titan Gym System API
+version: v1
+baseUri: https://titansportuat.titangym.com/Api/v2.2
+mediaType: application/json
+securitySchemes:
+  clientIdSecurity:
+    type: OAuth 2.0
+    description: Client ID enforcement for inbound and outbound security.
+    settings:
+      authorizationUri: https://example.com/oauth2/authorize
+      tokenUri: https://example.com/oauth2/token
+      scopes: []
+
+/invoices:
+  get:
+    description: Retrieves invoices data from Titan Gym API.
+    queryParameters:
+      $count:
+        type: boolean
+        description: Indicates if the count of records should be returned.
+      $filter:
+        type: string
+        description: Filters results based on date and deletion status.
+      $expand:
+        type: string
+        description: Expands related entities such as receiver and items.
+    responses:
+      200:
+        body:
+          application/json:
+            type: Invoice[]
+            example: |
+              [{
+                "number": "12345.67",
+                "invoiceDate": "2025-08-28T10:15:30Z",
+                "clubId": 101,
+                "isDeleted": false,
+                "invoiceId": 98765,
+                "receiver": {
+                  "name": "Acme Corporation",
+                  "notes": "Please send payment within 30 days",
+                  "contactPerson": "Jane Doe"
+                },
+                "invoiceLineItems": [
+                  {
+                    "itemNumber": 1,
+                    "name": "Subscription Fee",
+                    "value": {
+                      "net": 100.0,
+                      "gross": 119.0,
+                      "vat": 19.0
+                    }
+                  },
+                  {
+                    "itemNumber": 2,
+                    "name": "Setup Fee",
+                    "value": {
+                      "net": 50.0,
+                      "gross": 59.5,
+                      "vat": 9.5
+                    }
+                  }
+                ],
+                "transactions": [
+                  {
+                    "transactionId": 1111,
+                    "contractChargeId": 2001
+                  },
+                  {
+                    "transactionId": 1112,
+                    "contractChargeId": 2002
+                  }
+                ]
+              }]
+      400:
+        body:
+          application/json:
+            type: ErrorResponse
+            example: |
+              {
+                "code": "APP:BAD_REQUEST",
+                "message": "Invalid request parameters."
+              }
+
+/transactions/{id}:
+  get:
+    description: Retrieves general-ledger accounting data from Titan Gym API.
+    uriParameters:
+      id:
+        type: integer
+        description: The ID of the transaction to retrieve.
+    queryParameters:
+      $expand:
+        type: string
+        description: Expands related accounting details.
+    responses:
+      200:
+        body:
+          application/json:
+            type: Transaction
+            example: |
+              {
+                "clubId": 101,
+                "description": "Monthly Hosting Fee",
+                "amount": {
+                  "net": 500.0,
+                  "gross": 595.0,
+                  "vat": 95.0
+                },
+                "accountingDetails": [
+                  {
+                    "accountNumber": "4000-999-99",
+                    "ledger": "Mscla Gl",
+                    "split": 70.0
+                  },
+                  {
+                    "accountNumber": "4001-666-66",
+                    "ledger": "Mscau Gl",
+                    "split": 30.0
+                  }
+                ]
+              }
+      404:
+        body:
+          application/json:
+            type: ErrorResponse
+            example: |
+              {
+                "code": "APP:NOT_FOUND",
+                "message": "Transaction not found."
+              }
+
+/contractCharges/{id}:
+  get:
+    description: Retrieves contract charges data from Titan Gym API.
+    uriParameters:
+      id:
+        type: integer
+        description: The ID of the contract charge to retrieve.
+    queryParameters:
+      $expand:
+        type: string
+        description: Expands related contract details.
+    responses:
+      200:
+        body:
+          application/json:
+            type: ContractCharge
+            example: |
+              {
+                "clubId": 101,
+                "description": "Monthly Hosting Fee",
+                "amount": {
+                  "net": 500.0,
+                  "gross": 595.0,
+                  "vat": 95.0
+                },
+                "accountingDetails": [
+                  {
+                    "accountNumber": "4000",
+                    "ledger": "Main",
+                    "split": 70.0
+                  },
+                  {
+                    "accountNumber": "4001",
+                    "ledger": "Secondary",
+                    "split": 30.0
+                  }
+                ]
+              }
+      404:
+        body:
+          application/json:
+            type: ErrorResponse
+            example: |
+              {
+                "code": "APP:NOT_FOUND",
+                "message": "Contract charge not found."
+              }
+
+/payments:
+  post:
+    description: Marks the invoices as PAID in Titan Gym API.
+    uriParameters:
+      invoiceId:
+        type: integer
+        description: The ID of the invoice to mark as paid.
+    responses:
+      200:
+        body:
+          application/json:
+            type: SuccessResponse
+            example: |
+              {
+                "message": "Invoice marked as paid successfully."
+              }
+      400:
+        body:
+          application/json:
+            type: ErrorResponse
+            example: |
+              {
+                "code": "APP:BAD_REQUEST",
+                "message": "Invalid invoice ID."
+              }
+
+/types/invoice.raml:
+  type: object
+  properties:
+    number: string
+    invoiceDate: datetime
+    clubId: integer
+    isDeleted: boolean
+    invoiceId: integer
+    receiver:
+      type: object
+      properties:
+        name: string
+        notes: string
+        contactPerson: string
+    invoiceLineItems:
+      type: array
+      items:
+        type: object
+        properties:
+          itemNumber: integer
+          name: string
+          value:
+            type: object
+            properties:
+              net: number
+              gross: number
+              vat: number
+    transactions:
+      type: array
+      items:
+        type: object
+        properties:
+          transactionId: integer
+          contractChargeId: integer
+
+/types/transaction.raml:
+  type: object
+  properties:
+    clubId: integer
+    description: string
+    amount:
+      type: object
+      properties:
+        net: number
+        gross: number
+        vat: number
+    accountingDetails:
+      type: array
+      items:
+        type: object
+        properties:
+          accountNumber: string
+          ledger: string
+          split: number
+
+/types/contractCharge.raml:
+  type: object
+  properties:
+    clubId: integer
+    description: string
+    amount:
+      type: object
+      properties:
+        net: number
+        gross: number
+        vat: number
+    accountingDetails:
+      type: array
+      items:
+        type: object
+        properties:
+          accountNumber: string
+          ledger: string
+          split: number
+
+/types/errorResponse.raml:
+  type: object
+  properties:
+    code: string
+    message: string
+
+/types/successResponse.raml:
+  type: object
+  properties:
+    message: string
+```
+
+This RAML specification includes the necessary details for the Titan Gym API as per the provided Low-Level Design. Each endpoint is documented with descriptions, parameters, response types, and examples. Types are defined in separate files for clarity and maintainability.
