@@ -1,0 +1,194 @@
+```raml
+#%RAML 1.0
+title: Titan Gym System API
+version: v1
+baseUri: https://titansportuat.titangym.com/Api/v2.2
+mediaType: application/json
+securitySchemes:
+  clientId:
+    description: Client ID enforcement for inbound and outbound requests.
+    type: x-api-key
+    settings:
+      header: X-Client-ID
+
+types:
+  Invoice:
+    type: object
+    properties:
+      number: string
+      invoiceDate: datetime
+      clubId: integer
+      isDeleted: boolean
+      invoiceId: integer
+      receiver:
+        type: object
+        properties:
+          name: string
+          notes: string
+          contactPerson: string
+      invoiceLineItems:
+        type: array
+        items:
+          type: object
+          properties:
+            itemNumber: integer
+            name: string
+            value:
+              type: object
+              properties:
+                net: number
+                gross: number
+                vat: number
+      transactions:
+        type: array
+        items:
+          type: object
+          properties:
+            transactionId: integer
+            contractChargeId: integer
+
+  Transaction:
+    type: object
+    properties:
+      clubId: integer
+      description: string
+      amount:
+        type: object
+        properties:
+          net: number
+          gross: number
+          vat: number
+      accountingDetails:
+        type: array
+        items:
+          type: object
+          properties:
+            accountNumber: string
+            ledger: string
+            split: number
+
+  ContractCharge:
+    type: object
+    properties:
+      clubId: integer
+      description: string
+      amount:
+        type: object
+        properties:
+          net: number
+          gross: number
+          vat: number
+      accountingDetails:
+        type: array
+        items:
+          type: object
+          properties:
+            accountNumber: string
+            ledger: string
+            split: number
+
+  ErrorResponse:
+    type: object
+    properties:
+      errorCode: string
+      errorMessage: string
+
+/invoices:
+  get:
+    description: Retrieves invoices data from Titan Gym API.
+    queryParameters:
+      $count:
+        type: boolean
+        description: Flag to count the results.
+      $filter:
+        type: string
+        description: Filter for date range and deletion status.
+    responses:
+      200:
+        body:
+          application/json:
+            type: array
+            items: Invoice
+      400:
+        body:
+          application/json:
+            type: ErrorResponse
+            example:
+              errorCode: "APP:BAD_REQUEST"
+              errorMessage: "Invalid request parameters."
+
+/transactions/{id}:
+  get:
+    description: Retrieves transaction data associated with each invoice.
+    uriParameters:
+      id:
+        type: integer
+        description: The ID of the transaction.
+    queryParameters:
+      $expand:
+        type: string
+        description: Expand accounting details.
+    responses:
+      200:
+        body:
+          application/json: Transaction
+      404:
+        body:
+          application/json:
+            type: ErrorResponse
+            example:
+              errorCode: "APP:NOT_FOUND"
+              errorMessage: "Transaction not found."
+
+/contractCharges/{id}:
+  get:
+    description: Retrieves contract charges for a particular invoice.
+    uriParameters:
+      id:
+        type: integer
+        description: The ID of the contract charge.
+    queryParameters:
+      $expand:
+        type: string
+        description: Expand contract and accounting details.
+    responses:
+      200:
+        body:
+          application/json: ContractCharge
+      404:
+        body:
+          application/json:
+            type: ErrorResponse
+            example:
+              errorCode: "APP:NOT_FOUND"
+              errorMessage: "Contract charge not found."
+
+/payments:
+  post:
+    description: Marks the invoices as PAID in Titan Gym API.
+    body:
+      application/json:
+        type: object
+        properties:
+          invoiceId:
+            type: integer
+            description: The ID of the invoice to mark as paid.
+    responses:
+      200:
+        body:
+          application/json:
+            type: object
+            properties:
+              message: string
+              example:
+                message: "Invoice marked as paid successfully."
+      400:
+        body:
+          application/json:
+            type: ErrorResponse
+            example:
+              errorCode: "APP:BAD_REQUEST"
+              errorMessage: "Invalid invoice ID."
+```
+
+This RAML specification includes the required elements, endpoints, and types as described in the Low-Level Design. Each endpoint has been detailed with appropriate methods, parameters, and responses.
