@@ -1,0 +1,194 @@
+Here is the Mule 4 flow XML based on the provided requirements and details from the LLD:
+
+```xml
+<mule xmlns:anypoint-mq="http://www.mulesoft.org/schema/mule/anypoint-mq"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:json="http://www.mulesoft.org/schema/mule/json"
+      xmlns:logger="http://www.mulesoft.org/schema/mule/logger"
+      xmlns:validation="http://www.mulesoft.org/schema/mule/validation"
+      xsi:schemaLocation="
+      http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+      http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+      http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+      http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+      http://www.mulesoft.org/schema/mule/logger http://www.mulesoft.org/schema/mule/logger/current/mule-logger.xsd
+      http://www.mulesoft.org/schema/mule/validation http://www.mulesoft.org/schema/mule/validation/current/mule-validation.xsd">
+
+    <flow name="getInvoicesFlow">
+        <http:listener doc:name="Listener" doc:id="listener1" config-ref="HTTP_Listener_Configuration" path="/invoices" method="GET"/>
+        <logger level="INFO" message="Starting to retrieve invoices."/>
+        
+        <set-variable variableName="StartDate" value="#[attributes.queryParams.StartDate]" doc:name="Set StartDate"/>
+        <set-variable variableName="EndDate" value="#[attributes.queryParams.EndDate]" doc:name="Set EndDate"/>
+        
+        <http:request method="GET" doc:name="Request" doc:id="request1" config-ref="HTTP_Request_Configuration" url="https://titansportuat.titangym.com/Api/v2.2/odata/CompanyInvoices?$count=true&$filter=date ge #[vars.StartDate] and date lt #[vars.EndDate] and isDeleted eq false&$expand=receiver,items($expand=Transactions)">
+            <http:request-builder>
+                <http:header headerName="Authorization" value="Bearer #[vars.accessToken]"/>
+            </http:request-builder>
+        </http:request>
+        
+        <ee:transform doc:name="Transform Message" doc:id="transform1">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+                output application/json
+                ---
+                payload map ((item) -> {
+                    number: item.number,
+                    invoiceDate: item.invoiceDate,
+                    clubId: item.clubId,
+                    isDeleted: item.isDeleted,
+                    invoiceId: item.invoiceId,
+                    receiver: {
+                        name: item.receiver.name,
+                        notes: item.receiver.notes,
+                        contactPerson: item.receiver.contactPerson
+                    },
+                    invoiceLineItems: item.invoiceLineItems map ((lineItem) -> {
+                        itemNumber: lineItem.itemNumber,
+                        name: lineItem.name,
+                        value: {
+                            net: lineItem.value.net,
+                            gross: lineItem.value.gross,
+                            vat: lineItem.value.vat
+                        }
+                    }),
+                    transactions: item.transactions map ((transaction) -> {
+                        transactionId: transaction.transactionId,
+                        contractChargeId: transaction.contractChargeId
+                    })
+                })]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        
+        <logger level="INFO" message="Invoices retrieved successfully."/>
+        
+        <error-handler>
+            <on-error-continue>
+                <logger level="ERROR" message="Error in getInvoicesFlow: #[error.description]"/>
+                <set-payload value="#[error]" doc:name="Set Error Payload"/>
+            </on-error-continue>
+        </error-handler>
+    </flow>
+
+    <flow name="getTransactionFlow">
+        <http:listener doc:name="Listener" doc:id="listener2" config-ref="HTTP_Listener_Configuration" path="/transactions/{id}" method="GET"/>
+        <logger level="INFO" message="Starting to retrieve transaction data."/>
+        
+        <http:request method="GET" doc:name="Request" doc:id="request2" config-ref="HTTP_Request_Configuration" url="https://titansportuat.titangym.com/Api/v2.2/odata/Transactions/#{attributes.uriParams.id}?$expand=accountingDetails">
+            <http:request-builder>
+                <http:header headerName="Authorization" value="Bearer #[vars.accessToken]"/>
+            </http:request-builder>
+        </http:request>
+        
+        <ee:transform doc:name="Transform Message" doc:id="transform2">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+                output application/json
+                ---
+                {
+                    clubId: payload.clubId,
+                    description: payload.description,
+                    amount: {
+                        net: payload.amount.net,
+                        gross: payload.amount.gross,
+                        vat: payload.amount.vat
+                    },
+                    accountingDetails: payload.accountingDetails map ((detail) -> {
+                        accountNumber: detail.accountNumber,
+                        ledger: detail.ledger,
+                        split: detail.split
+                    })
+                }]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        
+        <logger level="INFO" message="Transaction data retrieved successfully."/>
+        
+        <error-handler>
+            <on-error-continue>
+                <logger level="ERROR" message="Error in getTransactionFlow: #[error.description]"/>
+                <set-payload value="#[error]" doc:name="Set Error Payload"/>
+            </on-error-continue>
+        </error-handler>
+    </flow>
+
+    <flow name="getContractChargesFlow">
+        <http:listener doc:name="Listener" doc:id="listener3" config-ref="HTTP_Listener_Configuration" path="/contractCharges/{id}" method="GET"/>
+        <logger level="INFO" message="Starting to retrieve contract charges."/>
+        
+        <http:request method="GET" doc:name="Request" doc:id="request3" config-ref="HTTP_Request_Configuration" url="https://titansportuat.titangym.com/Api/v2.2/odata/ContractCharges/#{attributes.uriParams.id}?$expand=contract($select=clubId),accountingDetails">
+            <http:request-builder>
+                <http:header headerName="Authorization" value="Bearer #[vars.accessToken]"/>
+            </http:request-builder>
+        </http:request>
+        
+        <ee:transform doc:name="Transform Message" doc:id="transform3">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+                output application/json
+                ---
+                {
+                    clubId: payload.clubId,
+                    description: payload.description,
+                    amount: {
+                        net: payload.amount.net,
+                        gross: payload.amount.gross,
+                        vat: payload.amount.vat
+                    },
+                    accountingDetails: payload.accountingDetails map ((detail) -> {
+                        accountNumber: detail.accountNumber,
+                        ledger: detail.ledger,
+                        split: detail.split
+                    })
+                }]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        
+        <logger level="INFO" message="Contract charges retrieved successfully."/>
+        
+        <error-handler>
+            <on-error-continue>
+                <logger level="ERROR" message="Error in getContractChargesFlow: #[error.description]"/>
+                <set-payload value="#[error]" doc:name="Set Error Payload"/>
+            </on-error-continue>
+        </error-handler>
+    </flow>
+
+    <flow name="markInvoiceAsPaidFlow">
+        <http:listener doc:name="Listener" doc:id="listener4" config-ref="HTTP_Listener_Configuration" path="/payments" method="POST"/>
+        <logger level="INFO" message="Starting to mark invoice as paid."/>
+        
+        <set-variable variableName="invoiceId" value="#[payload.invoiceId]" doc:name="Set Invoice ID"/>
+        
+        <http:request method="POST" doc:name="Request" doc:id="request4" config-ref="HTTP_Request_Configuration" url="https://titansportuat.titangym.com/Api/v2/Invoices/MarkCompanyInvoiceAsPaid">
+            <http:request-builder>
+                <http:header headerName="Authorization" value="Bearer #[vars.accessToken]"/>
+                <http:body><![CDATA[{"invoiceId": #[vars.invoiceId]}]]></http:body>
+            </http:request-builder>
+        </http:request>
+        
+        <logger level="INFO" message="Invoice marked as paid successfully."/>
+        
+        <error-handler>
+            <on-error-continue>
+                <logger level="ERROR" message="Error in markInvoiceAsPaidFlow: #[error.description]"/>
+                <set-payload value="#[error]" doc:name="Set Error Payload"/>
+            </on-error-continue>
+        </error-handler>
+    </flow>
+</mule>
+```
+
+### Summary of Endpoints
+1. **GET /invoices**: Retrieves invoice data.
+2. **GET /transactions/{id}**: Retrieves transaction data for a specific invoice.
+3. **GET /contractCharges/{id}**: Retrieves contract charges for a specific invoice.
+4. **POST /payments**: Marks an invoice as paid.
+
+### DataWeave Transformations
+The transformations for each flow are included within the `<ee:transform>` components. Each transformation maps the incoming payload to the required output format as specified in the LLD.
+
+This XML adheres to best practices for Mule 4 and includes appropriate error handling and logging. Please review the XML to ensure it meets your specific requirements.
